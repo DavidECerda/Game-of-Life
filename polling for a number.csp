@@ -1,0 +1,64 @@
+	.equ kbd_ctrl,$000
+	.equ kbd_data,$001
+	.equ carriage_rtn, $0D
+	.equ line_feed, $0A
+
+	.equ display,$317
+	.equ clear_screen, $01
+
+
+	.equ put_str, $E05
+	.equ frm_str, $E03
+
+poll:	inb kbd_ctrl
+	jge poll
+	inb kbd_data
+	cma# carriage_rtn
+	jeq end_poll
+	outb display
+	ldx buffer_len
+	stc char_buffer
+	inc buffer_len
+	jmp poll
+	
+end_poll:	lda# $0A
+	outb display
+	lda# $0D
+	outb display
+
+	psh# buffer_len
+	psh# char_buffer
+	psh# gens
+	jsr frm_str
+	ads# 3
+	cma# 1
+	jeq bad_value
+
+	lda gens
+	cma# 0
+	jeq end
+
+	psh# len
+	psh# msg
+	jsr put_str
+	ads#2
+	ldx# 0
+	clr gens
+	clr buffer_len
+	jmp poll
+
+bad_value:	psh# bad_len
+	psh# bad_val
+	jsr put_str
+	ads# 2
+	clr buffer_len
+	clr gens
+	ldx# 0
+	jmp poll
+
+bad_val:	.char 'Bad value, enter a number: ', bad_len	
+end:	hlt
+msg:	.char 'Nice',len
+gens:	.word 0
+buffer_len:	.word 0
+char_buffer:	.blkw 5, 0

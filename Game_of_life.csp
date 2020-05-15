@@ -1,0 +1,651 @@
+	.equ @, $000
+	.equ stack, $200
+	.equ row_num, 6
+	.equ col_num, 7
+
+	.equ enable_ints,$80 ; bits 10000000
+	.equ kbd_ctrl,$000
+	.equ kbd_data,$001
+	.equ carriage_rtn, $0D
+	.equ line_feed, $0A
+
+	.equ display,$317
+	.equ disp_ctrl, $316
+	.equ clear_screen, $01
+
+	.equ tim_ctrl,$030
+	.equ tim_stat,$030
+	.equ tim_value,$031
+	.equ reset_ready_bit,$40
+	.equ start_after_load,$10
+
+	.equ put_str, $E05
+	.equ frm_str, $E03
+	.equ put_num, $E00
+
+	lds# stack
+	ldf# 0
+
+	psh# start_len
+	psh# start_msg
+	jsr put_str
+	ads# 2
+	
+	psh# gen_len
+	psh# gen_word
+	jsr put_str
+	ads# 2
+
+	lda# 0
+	jsr put_num
+
+;calls subroutine to print grid
+	psh# row_num
+	psh# col_num
+	psh# old_array
+	jsr gen_print
+	ads# 3
+
+; prompt is printed
+start:	
+	jsr timer
+	psh# prompt_len
+	psh# prompt
+	jsr put_str
+	ads# 2
+
+;polling for key board input after the question
+
+poll:	inb kbd_ctrl
+	jge poll
+	inb kbd_data
+	cma# carriage_rtn	;if a carraige return is input then finish polling
+	jeq end_poll
+	outb display
+	ldx buffer_len
+	stc char_buffer
+	inc buffer_len
+	jmp poll
+
+	
+end_poll:	
+	;print an enter
+	lda# line_feed
+	outb display
+	lda# carriage_rtn
+	outb display
+
+	;get a number from user input and check is valid
+	psh# buffer_len
+	psh# char_buffer
+	psh# user_value
+	jsr frm_str
+	ads# 3
+	cma# 1
+	jeq bad_value
+	
+	;check if zero or negative, if zero end, if negative ask again
+	lda user_value
+	cma# 0 
+	jlt bad_value
+	jeq end
+
+	;add user input to gens and store. Go to generation loop to compute new gens
+	lda gens
+	ada user_value
+	sta gens
+	jmp gen_loop
+
+;bad value sends back to polling
+bad_value:	psh# bad_len
+	psh# bad_val
+	jsr put_str
+	ads# 2
+	clr user_value
+	clr buffer_len
+	clr char_buffer
+	ldx# 0
+	jmp poll
+
+;loop to print # of generations user input
+gen_loop:	
+	lda counter
+	cma gens
+	jgt end_gen_loop
+	
+	;subroutine to wait ten seconds w/kbd interrupts enabled
+	jsr timer 
+	lda# clear_screen
+	outb disp_ctrl
+
+	;clear screen before next gen
+	lda# clear_screen
+	outb disp_ctrl
+
+	;print generation #
+	psh# gen_len
+	psh# gen_word
+	jsr put_str
+	ads# 2
+
+	lda counter
+	jsr put_num
+
+	;nextgen subroutine to get next generation
+	psh# old_array
+	psh# row_num
+	psh# col_num
+	psh# next_array
+	jsr nextGen
+	ads# 4
+	
+	;subroutine to print arrays
+	psh# row_num
+	psh# col_num
+	psh# next_array
+	jsr gen_print
+	ads# 3
+	
+	;subroutine to copy arrays, from new to old
+	psh# next_array
+	psh# row_num
+	psh# col_num
+	psh# old_array
+	jsr cpy_array
+	ads# 4
+
+	inc counter
+	jmp gen_loop
+
+;end of gen_loop, clears user_input, but leaves gensand counter untouched 
+end_gen_loop:	clr buffer_len
+	clr user_value
+	clr char_buffer
+	ldx# 0
+	jmp start
+
+;end of program
+end:	psh# end_len
+	psh# end_msg
+	jsr put_str
+	ads# 2
+	hlt
+
+
+
+buffer_len:	.word 0
+user_value:	.word 0
+gens:	.word 0
+counter:	.word 1
+
+start_msg:	.char 'Here is the starting grid:\cr\lf\cr\lf', start_len
+gen_word:	.char 'Generation: ', gen_len
+prompt:	.char '\cr\lfHow many new generations would you like to print (enter 0 to end)? ', prompt_len
+bad_val:	.char 'Bad value, enter a number: ', bad_len	
+end_msg:	.char '\cr\lfEnd of program.', end_len
+old_array:	
+
+;row 1
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	
+
+;row 2
+	.word 0
+	.word 0
+	.word 1
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+
+
+;row 3
+	.word 0
+	.word 0
+	.word 0
+	.word 1
+	.word 0
+	.word 0
+	.word 0
+
+
+;row 4
+	.word 0
+	.word 1
+	.word 1
+	.word 1
+	.word 0
+	.word 0
+	.word 0
+
+
+;row 5
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+
+;row 6
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+	.word 0
+
+
+next_array:	.blkw row_num*col_num, 0
+char_buffer:	.blkw 5, 0
+
+	.equ @, $225
+	.equ p_rows, 4
+	.equ p_cols, 3
+	.equ array, 2
+	.equ star, $2A
+	.equ dot, $2E
+	
+;subroutine to print arrays, 1 become * and 0 become .	
+gen_print:	pshf
+	tsf
+	psha
+	pshx
+	ldx#0
+
+	clr r_dex
+	clr c_dex
+
+r_print_loop:	lda r_dex
+	cma ! p_rows
+	jge end_r_print_loop
+
+c_print_loop:	lda c_dex
+	cma ! p_cols
+	jge end_c_print_loop
+
+	lda r_dex
+	mul ! p_cols
+	ada c_dex
+	tax
+	
+	lda& ! array
+	cma# 0
+	jgt prt_star
+	
+	lda# dot
+	outb display
+
+	inc c_dex
+	jmp c_print_loop
+
+prt_star:	lda# star
+	outb display
+	inc c_dex
+	jmp c_print_loop
+
+end_c_print_loop:
+	lda# carriage_rtn
+	outb display
+	lda# line_feed
+	outb display
+	clr c_dex
+	inc r_dex
+	jmp r_print_loop
+
+end_r_print_loop:
+	popx
+	popa
+	popf
+	rtn
+	
+r_dex:	.word 0
+c_dex:	.word 0
+
+	.equ @, $275
+	.equ orig_array, 5
+	.equ cpy_row, 4
+	.equ cpy_col, 3
+	.equ copied_array, 2
+
+;subroutine to copy one array to another array
+cpy_array:	pshf
+	tsf
+	psha
+	pshx
+	ldx# 0
+	clr cpy_r
+	clr cpy_c
+
+cpy_r_loop:	lda cpy_r
+	cma ! cpy_row
+	jge end_cpy_r_loop
+
+cpy_c_loop:	lda cpy_c
+	cma ! cpy_col
+	jge end_cpy_c_loop
+
+	lda cpy_r
+	mul ! cpy_col
+	ada cpy_C
+	tax
+
+	lda& ! orig_array
+	sta& ! copied_array
+	
+	inc cpy_c
+	jmp cpy_c_loop
+
+end_cpy_c_loop:
+	clr cpy_c
+	inc cpy_r
+	jmp cpy_r_loop
+
+end_cpy_r_loop:
+	popx
+	popa
+	popf
+	rtn
+
+cpy_r:	.word 0
+cpy_c:	.word 0
+
+;The timer subroutine, counts about 625000 cusp ticks or about 10.40 secounds.
+;enables kbd interrupts to end timer
+
+	.equ @, $325
+	
+timer: 	psha
+	lda# enable_ints
+	outb kbd_ctrl
+
+	lda time
+	outw tim_value
+	lda# reset_ready_bit + start_after_load
+	outb tim_ctrl
+	sie
+time_loop:	inb tim_stat
+	nop
+	nop
+	nop	
+	jge time_loop
+	cie
+	popa
+	rtn
+
+time:	.word 650000
+
+
+
+	.equ @, $350
+
+;kdb interrupt subroutine, puts time value of 1 into timer to make it immediately end
+kbd_int:	psha
+	inb kbd_data
+	lda# 1
+	outw tim_value
+	lda# reset_ready_bit + start_after_load
+	outb tim_ctrl
+	popa
+	irtn
+
+
+	.equ @, $400
+	.equ og_array, 5
+	.equ rows, 4
+	.equ cols, 3
+	.equ new_array, 2
+
+;nextgen subroutine to make the next generation
+nextGen:	
+	pshf
+	tsf
+	psha
+	pshx
+	ldx# 0
+	clr r
+	clr c
+	
+	;subroutine call to pad old generation array with zero's on the border to make the math easier
+	psh ! og_array
+	psh ! rows
+	psh ! cols
+	psh# padded_array
+	jsr pad_array
+	ads# 4
+
+r_loop:	lda r
+	cma ! rows
+	jge end_r
+
+c_loop:	lda c
+	cma ! cols
+	jge end_c
+	
+	lda ! cols
+	ada# 2
+	inc r
+	mul r
+	dec r
+	ada c
+	ada# 1
+	tax
+	
+	lda+ padded_array
+	sta curr
+
+	sbx# 3
+	sbx ! cols
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+
+	adx# 1
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+
+	adx# 1
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+	adx ! cols
+	adx# 2
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+	
+	sbx# 2
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+
+	adx ! cols
+	adx# 2
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+
+	adx# 1
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+
+	adx# 1
+	lda+ padded_array
+	ada neigh_count
+	sta neigh_count
+
+;done counting neighbors, time to determine the fate of the cell
+	
+	lda r
+	mul ! cols
+	ada c
+	tax
+		
+	lda neigh_count
+	cma# 4
+	jge dead
+
+	cma# 1
+	jle dead
+
+	cma# 3
+	jeq alive
+
+	lda curr
+	sta& ! new_array
+	jmp next
+		
+dead: 
+	lda# 0
+	sta& ! new_array
+	jmp next
+
+alive: 	lda# 1
+	sta& ! new_array
+	jmp next
+
+next:	inc c
+	clr neigh_count
+	jmp c_loop
+
+end_c:
+	clr c
+	inc r
+	jmp r_loop
+
+end_r:		
+	popa
+	popx
+	popf
+	rtn
+
+r:	.word 0
+c:	.word 0
+neigh_count:	.word 0
+curr:	.word 0
+padded_array:	.word 0
+
+	.equ @, $700
+	.equ old, 5
+	.equ pad_rows, 4
+	.equ pad_cols, 3
+	.equ pad, 2
+
+;padded subroutine to add zeroes to the border of array
+
+pad_array:	pshf
+	tsf
+	psha
+	pshx
+	ldx# 0
+	clr r_index
+	clr c_index
+	clr new_r_num
+	clr new_c_num
+	lda ! pad_rows
+	ada# 2
+	sta new_r_num
+	lda ! pad_cols
+	ada# 2
+	sta new_c_num
+
+r_pad_loop:	lda r_index
+	cma new_r_num
+	jge r_loop_end
+
+	cma# 0
+	jeq special_row
+
+	lda new_r_num
+	sba# 1
+	cma r_index
+	jeq special_row
+	
+c_pad_loop:	lda c_index
+	cma new_c_num
+	jge c_loop_end
+	
+	lda c_index
+	cma# 0
+	jeq add_zero
+
+	lda new_c_num
+	sba# 1
+	cma c_index
+	jeq add_zero
+	
+	lda r_index
+	sba# 1
+	mul ! pad_cols
+	ada c_index
+	sba# 1
+	tax
+
+	lda& ! old
+	sta value
+
+	lda r_index
+	mul new_c_num
+	ada c_index
+	tax
+	
+	lda value
+	sta& ! pad
+	inc c_index
+	jmp c_pad_loop
+	
+	
+add_zero:	lda r_index
+	mul new_c_num
+	ada c_index
+	tax
+	lda# 0
+	sta& ! pad
+	inc c_index
+	jmp c_pad_loop	
+
+
+special_row:	
+	lda c_index
+	cma new_c_num
+	jge c_loop_end
+	lda r_index
+	mul new_c_num
+	ada c_index
+	tax
+	lda# 0
+	sta& ! pad
+	inc c_index
+	jmp special_row
+
+c_loop_end:	inc r_index
+	clr c_index
+	jmp r_pad_loop
+
+r_loop_end:
+	popx
+	popa
+	popf
+	rtn
+	
+
+r_index:	.word
+c_index:	.word
+new_r_num:	.word
+new_c_num:	.word
+value:	.word
+
+
+;int vector
+	.equ @,$FF8
+	.word kbd_int

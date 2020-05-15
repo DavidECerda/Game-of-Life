@@ -1,0 +1,251 @@
+		.equ @, $000
+		.equ stack, $100
+		.equ row_num, 5
+		.equ col_num, 4
+
+		lds# stack
+		ldf# 0
+		psh# old_array
+		psh# row_num
+		psh# col_num
+		psh# next_array
+		jsr nextGen
+		ads# 4
+		hlt
+		
+old_array:	.word 1
+	.word 1
+	.word 1
+	.word 1
+	.word 0
+	.word 1
+	.word 0
+	.word 1
+	.word 1
+	.word 1
+	.word 0
+	.word 0
+	.word 1
+	.word 1
+	.word 1
+	.word 1
+	.word 0
+	.word 0
+	.word 0
+	.word 1
+
+next_array:	.blkw row_num*col_num, 0
+
+
+
+
+		.equ @, $400
+		.equ og_array, 5
+		.equ rows, 4
+		.equ cols, 3
+		.equ new_array, 2
+
+nextGen:	
+		pshf
+		tsf
+		psha
+		pshx
+		ldx# 0
+
+		lda ! rows
+		sba# 1
+		sta rows_one_less
+		lda ! cols
+		sba# 1
+		sta cols_one_less
+		clr r
+		clr c
+
+r_loop:		lda r
+		cma rows_one_less
+		jgt end_r
+		jeq last_r_flag
+		jmp neigh_loop
+
+last_r_flag:	
+		lda# 1
+		sta last_row
+		jmp neigh_loop
+
+
+neigh_loop:		lda r
+		mul ! cols
+		ada c
+		sta cur_index
+
+		ldx cur_index
+		lda& ! new_array
+		sta neigh_count
+		lda& ! og_array
+		sta curr
+
+		lda c
+		cma cols_one_less
+		jgt end_neigh
+		jeq last_c
+		
+
+		lda# 1
+		cma last_row
+		jeq last
+
+		lda c
+		cma# 0
+		jeq first_c
+
+		
+		adx# 1
+		ada& ! new_array
+		sta& ! new_array
+
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+
+		adx ! cols
+		lda curr
+		ada& ! new_array
+		sta& ! new_array
+
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+
+		sbx# 1
+		lda curr
+		ada& ! new_array
+		sta& ! new_array
+		
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+		
+		sbx# 1
+		lda curr
+		ada& ! new_array
+		sta& ! new_array
+		
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+
+		jmp a_or_d
+
+first_c:		
+		adx# 1
+		ada& ! new_array
+		sta& ! new_array
+
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+
+		adx ! cols
+		lda curr
+		ada& ! new_array
+		sta& ! new_array
+
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+
+		sbx# 1
+		lda curr
+		ada& ! new_array
+		sta& ! new_array
+		
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+		
+		jmp a_or_d
+
+last_c:
+		lda# 1
+		cma last_row
+		jeq last
+		
+		adx ! cols
+		lda curr
+		ada& ! new_array
+		sta& ! new_array
+		
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+		
+		sbx# 1
+		lda curr
+		ada& ! new_array
+		sta& ! new_array
+		
+		lda& ! og_array
+		ada neigh_count
+		sta neigh_count
+
+		jmp a_or_d
+
+last: 
+		jmp a_or_d
+
+a_or_d:
+		ldx cur_index
+		lda neigh_count
+		cma# 4
+		jge dead
+
+		cma# 1
+		jle dead
+
+		cma# 3
+		jeq alive
+
+		lda curr
+		sta& ! new_array
+		jmp next
+		
+dead: 
+		lda# 0
+		sta& ! new_array
+		jmp next
+
+alive: 		lda# 1
+		sta& ! new_array
+		jmp next
+
+next:		inc c
+		jmp neigh_loop
+
+end_neigh:
+		clr c
+		inc r
+		jmp r_loop
+
+end_r:		
+		popa
+		popx
+		popf
+		rtn
+		
+		
+	
+	
+	
+		
+
+
+
+
+r:		.word 0
+c:		.word 0
+rows_one_less:		.word 0
+cols_one_less:		.word 0
+last_row:		.word 0
+neigh_count:		.word 0
+curr:		.word 0
+cur_index:		.word 0

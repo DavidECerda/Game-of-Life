@@ -1,0 +1,56 @@
+
+	.equ @, $000
+	.equ stack, $050
+	.equ tim_ctrl,$030
+	.equ tim_stat,$030
+	.equ tim_value,$031
+	.equ reset_ready_bit,$40
+	.equ start_after_load,$10
+	
+	.equ enable_ints, $80
+	.equ kbd_ctrl, $000
+	.equ kbd_data, $001
+	.equ zero, $30
+	.equ nine, $39
+	
+main: 	lds# stack
+	lda# enable_ints
+	outb kbd_ctrl
+
+	lda time
+	outw tim_value
+	lda# reset_ready_bit + start_after_load
+	outb tim_ctrl
+	sie
+
+loop:	inb tim_stat
+	nop
+	lda# zero
+	nop	
+	jge loop
+	outb $317
+	jmp reset
+
+reset:	lda# reset_ready_bit
+	outb tim_ctrl
+	jmp loop
+
+
+time:	.word 72500
+
+	.equ @, $250
+kbd_int:	psha
+	lda# 1000
+	outw tim_value
+	lda# reset_ready_bit + start_after_load
+	outb tim_ctrl
+	cma# nine
+	ada# 1
+	jmp end
+to_zero:	lda# zero
+end:	popa
+	irtn
+
+
+	.equ @,$FF8
+	.word kbd_int

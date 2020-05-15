@@ -1,0 +1,29 @@
+.equ crt_vbuf, $100
+.equ crt_cntl, $316
+.equ clear_screen, $01
+.equ crt_width, 38
+.equ line_chars, 32
+
+main:	lda# clear_screen
+	outb crt_cntl
+	ldx# (3*crt_width) + 3
+	clr char
+	clr count
+loop:	lda char
+	outb+ crt_vbuf
+	adx# 1
+	inc char
+	inc count
+	lda count
+	cma# line_chars
+	jlt loop
+	
+	adx# crt_width-line_chars
+	clr count
+	lda char
+	cma# 256
+	jlt loop
+	hlt
+
+char:	.blkw 1
+count:	.blkw 1
